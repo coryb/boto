@@ -37,7 +37,7 @@ import logging.config
 import urlparse
 from boto.exception import InvalidUriError
 
-__version__ = '2.24.0'
+__version__ = '2.29.1'
 Version = __version__  # for backware compatibility
 
 # http://bugs.python.org/issue7980
@@ -196,6 +196,11 @@ def connect_autoscale(aws_access_key_id=None, aws_secret_access_key=None,
 
     :rtype: :class:`boto.ec2.autoscale.AutoScaleConnection`
     :return: A connection to Amazon's Auto Scaling Service
+
+    :type use_block_device_types bool
+    :param use_block_device_types: Specifies whether to return described Launch Configs with block device mappings containing
+        block device types, or a list of old style block device mappings (deprecated).  This defaults to false for compatability
+        with the old incorrect style.
     """
     from boto.ec2.autoscale import AutoScaleConnection
     return AutoScaleConnection(aws_access_key_id, aws_secret_access_key,
@@ -310,6 +315,25 @@ def connect_rds(aws_access_key_id=None, aws_secret_access_key=None, **kwargs):
     """
     from boto.rds import RDSConnection
     return RDSConnection(aws_access_key_id, aws_secret_access_key, **kwargs)
+
+
+def connect_rds2(aws_access_key_id=None, aws_secret_access_key=None, **kwargs):
+    """
+    :type aws_access_key_id: string
+    :param aws_access_key_id: Your AWS Access Key ID
+
+    :type aws_secret_access_key: string
+    :param aws_secret_access_key: Your AWS Secret Access Key
+
+    :rtype: :class:`boto.rds2.layer1.RDSConnection`
+    :return: A connection to RDS
+    """
+    from boto.rds2.layer1 import RDSConnection
+    return RDSConnection(
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        **kwargs
+    )
 
 
 def connect_emr(aws_access_key_id=None, aws_secret_access_key=None, **kwargs):
@@ -629,10 +653,28 @@ def connect_cloudsearch(aws_access_key_id=None,
     :type aws_secret_access_key: string
     :param aws_secret_access_key: Your AWS Secret Access Key
 
-    :rtype: :class:`boto.ec2.autoscale.CloudSearchConnection`
+    :rtype: :class:`boto.cloudsearch.layer2.Layer2`
     :return: A connection to Amazon's CloudSearch service
     """
     from boto.cloudsearch.layer2 import Layer2
+    return Layer2(aws_access_key_id, aws_secret_access_key,
+                  **kwargs)
+
+
+def connect_cloudsearch2(aws_access_key_id=None,
+                         aws_secret_access_key=None,
+                         **kwargs):
+    """
+    :type aws_access_key_id: string
+    :param aws_access_key_id: Your AWS Access Key ID
+
+    :type aws_secret_access_key: string
+    :param aws_secret_access_key: Your AWS Secret Access Key
+
+    :rtype: :class:`boto.cloudsearch2.layer2.Layer2`
+    :return: A connection to Amazon's CloudSearch2 service
+    """
+    from boto.cloudsearch2.layer2 import Layer2
     return Layer2(aws_access_key_id, aws_secret_access_key,
                   **kwargs)
 

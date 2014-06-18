@@ -45,6 +45,7 @@ Handles basic connections to AWS
 
 from __future__ import with_statement
 import base64
+from datetime import datetime
 import errno
 import httplib
 import os
@@ -373,7 +374,7 @@ class HTTPRequest(object):
             val = self.headers[key]
             if isinstance(val, unicode):
                 safe = '!"#$%&\'()*+,/:;<=>?@[\\]^`{|}~'
-                self.headers[key] = urllib.quote_plus(val.encode('utf-8'), safe)
+                self.headers[key] = urllib.quote(val.encode('utf-8'), safe)
 
         connection._auth_handler.add_auth(self, **kwargs)
 
@@ -493,8 +494,11 @@ class AWSAuthConnection(object):
                     "support this feature are not available. Certificate "
                     "validation is only supported when running under Python "
                     "2.6 or later.")
-        self.ca_certificates_file = config.get_value(
+        certs_file = config.get_value(
                 'Boto', 'ca_certificates_file', DEFAULT_CA_CERTS_FILE)
+        if certs_file == 'system':
+            certs_file = None
+        self.ca_certificates_file = certs_file
         if port:
             self.port = port
         else:
@@ -568,6 +572,7 @@ class AWSAuthConnection(object):
               host, config, self.provider, self._required_auth_capability())
         if getattr(self, 'AuthServiceName', None) is not None:
             self.auth_service_name = self.AuthServiceName
+        self.request_hook = None
 
     def __repr__(self):
         return '%s:%s' % (self.__class__.__name__, self.host)
@@ -819,9 +824,12 @@ class AWSAuthConnection(object):
         h = httplib.HTTPConnection(host)
 
         if self.https_validate_certificates and HAVE_HTTPS_CONNECTION:
-            boto.log.debug("wrapping ssl socket for proxied connection; "
-                           "CA certificate file=%s",
-                           self.ca_certificates_file)
+            msg = "wrapping ssl socket for proxied connection; "
+            if self.ca_certificates_file:
+                msg += "CA certificate file=%s" %self.ca_certificates_file
+            else:
+                msg += "using system provided SSL certs"
+            boto.log.debug(msg)
             key_file = self.http_connection_kwargs.get('key_file', None)
             cert_file = self.http_connection_kwargs.get('cert_file', None)
             sslSock = ssl.wrap_socket(sock, keyfile=key_file,
@@ -859,6 +867,9 @@ class AWSAuthConnection(object):
                 self._auth_handler.host_header(self.host, request)
         except AttributeError:
             request.headers['Host'] = self.host.split(':', 1)[0]
+
+    def set_request_hook(self, hook):
+        self.request_hook = hook
 
     def _mexe(self, request, sender=None, override_num_retries=None,
               retry_handler=None):
@@ -902,6 +913,7 @@ class AWSAuthConnection(object):
                 if 's3' not in self._required_auth_capability():
                     if not getattr(self, 'anon', False):
                         self.set_host_header(request)
+                request.start_time = datetime.now()
                 if callable(sender):
                     response = sender(connection, request.method, request.path,
                                       request.body, request.headers)
@@ -942,6 +954,8 @@ class AWSAuthConnection(object):
                     else:
                         self.put_http_connection(request.host, request.port,
                                                  self.is_secure, connection)
+                    if self.request_hook is not None:
+                        self.request_hook.handle_request_data(request, response)
                     return response
                 else:
                     scheme, request.host, request.path, \
@@ -982,6 +996,8 @@ class AWSAuthConnection(object):
         # and stil haven't succeeded.  So, if we have a response object,
         # use it to raise an exception.
         # Otherwise, raise the exception that must have already happened.
+        if self.request_hook is not None:
+            self.request_hook.handle_request_data(request, response, error=True)
         if response:
             raise BotoServerError(response.status, response.reason, body)
         elif e:
